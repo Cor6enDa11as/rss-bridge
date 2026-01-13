@@ -80,17 +80,16 @@ class PikabuBridge extends BridgeAbstract
     {
         $link = $this->getURI();
 
-        // Формируем заголовки из переменной Northflank
+        // --- БЛОК АВТОРИЗАЦИИ (Northflank) ---
         $my_cookies = getenv('PIKABU_COOKIES');
         $header = [];
         
         if ($my_cookies) {
             $header[] = 'Cookie: ' . $my_cookies;
             $header[] = 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0';
-			$header[] = 'X-Requested-With: XMLHttpRequest';
+            $header[] = 'X-Requested-With: XMLHttpRequest';
         }
 
-        // Передаем массив $header вторым аргументом
         $text_html = getContents($link, $header);
         $text_html = iconv('windows-1251', 'utf-8', $text_html);
         $html = str_get_html($text_html);
@@ -103,6 +102,7 @@ class PikabuBridge extends BridgeAbstract
                 continue;
             }
 
+            // Удаляем лишние элементы
             $el_to_remove_selectors = [
                 '.story__read-more',
                 'script',
@@ -115,24 +115,32 @@ class PikabuBridge extends BridgeAbstract
                 }
             }
 
-            foreach ($post->find('[data-type=gifx]') as $el) {
-                $src = $el->getAttribute('data-source');
-                $el->outertext = '<img src="' . $src . '">';
-            }
-
-            foreach ($post->find('img') as $img) {
-                $src = $img->getAttribute('src');
-                if (!$src) {
-                    $src = $img->getAttribute('data-src');
-                    if (!$src) {
-                        continue;
+            // --- ОБРАБОТКА ВИДЕО И ГИФОК (Убираем черный экран) ---
+            foreach ($post->find('div.story-block_type_video, div[data-type=video], [data-type=gifx]') as $media) {
+                $video_url = $media->getAttribute('data-source');
+                $preview = $media->getAttribute('data-preview');
+                
+                if ($video_url) {
+                    $media->outertext = '<br><a href="' . $video_url . '">📺 Смотреть медиа/видео (внешняя ссылка)</a><br>';
+                    if ($preview) {
+                        $media->outertext .= '<img src="' . $preview . '" style="max-width:100%;">';
                     }
                 }
-                $img->outertext = '<img src="' . $src . '">';
+            }
 
-                // it is assumed, that img's parents are links to post itself
-                // we don't need them
-                $img->parent()->outertext = $img->outertext;
+            // --- ОБРАБОТКА ИЗОБРАЖЕНИЙ (Обход заглушек 18+) ---
+            foreach ($post->find('img') as $img) {
+                $src = $img->getAttribute('data-src') ?: $img->getAttribute('src');
+                $large_src = $img->getAttribute('data-large-image');
+                $final_src = $large_src ?: $src;
+
+                if ($final_src) {
+                    $img->outertext = '<img src="' . $final_src . '" style="max-width:100%;">';
+                    // Убираем обертки-ссылки, которые могут вести на логин
+                    if ($img->parent()->tag == 'a') {
+                        $img->parent()->outertext = $img->outertext;
+                    }
+                }
             }
 
             $categories = [];
@@ -143,15 +151,12 @@ class PikabuBridge extends BridgeAbstract
             }
 
             $title_element = $post->find('.story__title-link', 0);
-            if (str_contains($title_element->href, 'from=cpm')) {
-                // skip sponsored posts
+            if (!$title_element || str_contains($title_element->href, 'from=cpm')) {
                 continue;
             }
 
             $title = $title_element->plaintext;
             $community_link = $post->find('.story__community-link', 0);
-            // adding special marker for "Maybe News" section
-            // these posts are fake
             if (!is_null($community_link) && $community_link->getAttribute('href') == '/community/maybenews') {
                 $title = '[' . trim($community_link->plaintext) . '] ' . $title;
             }
@@ -160,11 +165,17 @@ class PikabuBridge extends BridgeAbstract
             $item['categories'] = $categories;
             $item['author'] = trim($post->find('.user__nick', 0)->plaintext);
             $item['title'] = $title;
-            $item['content'] = strip_tags(
-                backgroundToImg($post->find('.story__content-inner', 0)->innertext),
-                '<br><p><img><a><s>
-			'
-            );
+            
+            $content_inner = $post->find('.story__content-inner', 0);
+            if ($content_inner) {
+                $item['content'] = strip_tags(
+                    backgroundToImg($content_inner->innertext),
+                    '<br><p><img><a><s>'
+                );
+            } else {
+                $item['content'] = 'Контент скрыт. Проверьте PIKABU_COOKIES в Northflank.';
+            }
+            
             $item['uri'] = $title_element->href;
             $item['timestamp'] = strtotime($time->getAttribute('datetime'));
             $this->items[] = $item;
