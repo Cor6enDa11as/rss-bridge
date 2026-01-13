@@ -90,7 +90,11 @@ class PikabuBridge extends BridgeAbstract
             $header[] = 'X-Requested-With: XMLHttpRequest';
         }
 
-        $text_html = getContents($link, $header);
+        $proxy_url = 'https://api.allorigins.win/get?url=' . urlencode($link);
+        $json_response = getContents($proxy_url);
+        $data = json_decode($json_response);
+        $text_html = $data->contents;
+        
         $text_html = iconv('windows-1251', 'utf-8', $text_html);
         $html = str_get_html($text_html);
 
