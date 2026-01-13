@@ -128,16 +128,22 @@ class PikabuBridge extends BridgeAbstract
                 }
             }
 
-            // --- УЛУЧШЕННАЯ ОБРАБОТКА ИЗОБРАЖЕНИЙ ---
+            // --- УЛУЧШЕННАЯ ОБРАБОТКА ИЗОБРАЖЕНИЙ ДЛЯ ОБХОДА NSFW ---
             foreach ($post->find('img') as $img) {
+                // Выбираем самый «прямой» источник изображения
                 $src = $img->getAttribute('data-src') ?: $img->getAttribute('src');
                 $large_src = $img->getAttribute('data-large-image');
                 $final_src = $large_src ?: $src;
 
                 if ($final_src) {
-                    // Добавляем referrerpolicy="no-referrer", чтобы скрыть, что запрос идет из RSS
-                    $img->outertext = '<img src="' . $final_src . '" style="max-width:100%;" referrerpolicy="no-referrer">';
+                    // Важно: referrerpolicy="no-referrer" заставляет браузер не сообщать Пикабу, 
+                    // что картинка открыта из вашего RSS-моста. Это часто снимает заглушку.
+                    $img->outertext = '<img src="' . $final_src . '" 
+                        style="max-width:100%;" 
+                        referrerpolicy="no-referrer" 
+                        loading="lazy">';
                     
+                    // Убираем ссылку-обертку, так как она ведет на страницу с требованием авторизации
                     if ($img->parent()->tag == 'a') {
                         $img->parent()->outertext = $img->outertext;
                     }
