@@ -128,22 +128,21 @@ class PikabuBridge extends BridgeAbstract
                 }
             }
 
-            // --- УЛУЧШЕННАЯ ОБРАБОТКА ИЗОБРАЖЕНИЙ ДЛЯ ОБХОДА NSFW ---
+            // --- ФОРСИРОВАННАЯ ЗАМЕНА ДЛЯ ОБХОДА БЕЛОЙ ЗАГЛУШКИ ---
             foreach ($post->find('img') as $img) {
-                // Выбираем самый «прямой» источник изображения
                 $src = $img->getAttribute('data-src') ?: $img->getAttribute('src');
                 $large_src = $img->getAttribute('data-large-image');
                 $final_src = $large_src ?: $src;
 
                 if ($final_src) {
-                    // Важно: referrerpolicy="no-referrer" заставляет браузер не сообщать Пикабу, 
-                    // что картинка открыта из вашего RSS-моста. Это часто снимает заглушку.
-                    $img->outertext = '<img src="' . $final_src . '" 
+                    // Используем wsrv.nl — это бесплатный кэширующий прокси для картинок.
+                    // Он скачает картинку сам и отдаст её вам, обходя блокировки Пикабу.
+                    $proxy_src = 'https://wsrv.nl/?url=' . urlencode($final_src);
+
+                    $img->outertext = '<img src="' . $proxy_src . '" 
                         style="max-width:100%;" 
-                        referrerpolicy="no-referrer" 
-                        loading="lazy">';
+                        referrerpolicy="no-referrer">';
                     
-                    // Убираем ссылку-обертку, так как она ведет на страницу с требованием авторизации
                     if ($img->parent()->tag == 'a') {
                         $img->parent()->outertext = $img->outertext;
                     }
