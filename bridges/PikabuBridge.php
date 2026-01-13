@@ -128,15 +128,16 @@ class PikabuBridge extends BridgeAbstract
                 }
             }
 
-            // --- ОБРАБОТКА ИЗОБРАЖЕНИЙ (Обход заглушек 18+) ---
+            // --- УЛУЧШЕННАЯ ОБРАБОТКА ИЗОБРАЖЕНИЙ ---
             foreach ($post->find('img') as $img) {
                 $src = $img->getAttribute('data-src') ?: $img->getAttribute('src');
                 $large_src = $img->getAttribute('data-large-image');
                 $final_src = $large_src ?: $src;
 
                 if ($final_src) {
-                    $img->outertext = '<img src="' . $final_src . '" style="max-width:100%;">';
-                    // Убираем обертки-ссылки, которые могут вести на логин
+                    // Добавляем referrerpolicy="no-referrer", чтобы скрыть, что запрос идет из RSS
+                    $img->outertext = '<img src="' . $final_src . '" style="max-width:100%;" referrerpolicy="no-referrer">';
+                    
                     if ($img->parent()->tag == 'a') {
                         $img->parent()->outertext = $img->outertext;
                     }
